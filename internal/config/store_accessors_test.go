@@ -3,6 +3,9 @@ package config
 import "testing"
 
 func TestStoreCurrentInputFileAccessors(t *testing.T) {
+	t.Setenv("HKUST_TOKEN", "")
+	t.Setenv("HKUST_USE_API", "")
+
 	store := &Store{cfg: Config{}}
 	if !store.CurrentInputFileEnabled() {
 		t.Fatal("expected current input file enabled by default")
@@ -24,6 +27,17 @@ func TestStoreCurrentInputFileAccessors(t *testing.T) {
 	}
 	if got := store.CurrentInputFileMinChars(); got != 12345 {
 		t.Fatalf("current input file min_chars=%d want=12345", got)
+	}
+}
+
+func TestStoreCurrentInputFileDisabledForHKUST(t *testing.T) {
+	t.Setenv("HKUST_TOKEN", "school-token")
+	t.Setenv("HKUST_USE_API", "school-use-api")
+
+	enabled := true
+	store := &Store{cfg: Config{CurrentInputFile: CurrentInputFileConfig{Enabled: &enabled}}}
+	if store.CurrentInputFileEnabled() {
+		t.Fatal("expected current input file disabled for HKUST upstream")
 	}
 }
 
