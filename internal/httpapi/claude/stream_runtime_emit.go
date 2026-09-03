@@ -30,11 +30,19 @@ func (s *claudeStreamRuntime) sendErrorWithCode(status int, message, code string
 	if msg == "" {
 		msg = "upstream stream error"
 	}
+	if isClaudeContextWindowExceeded(msg) {
+		status = 400
+		msg = claudePromptTooLongMessage
+		code = "invalid_request"
+	}
 	if code == "" {
 		code = "internal_error"
 	}
 	errType := "api_error"
-	if status == 429 {
+	switch status {
+	case 400:
+		errType = "invalid_request_error"
+	case 429:
 		errType = "rate_limit_error"
 	}
 	s.send("error", map[string]any{
