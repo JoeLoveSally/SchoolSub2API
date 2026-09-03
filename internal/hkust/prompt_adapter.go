@@ -2,7 +2,10 @@ package hkust
 
 import "strings"
 
-const webChatTranscriptPreamble = "Continue the serialized conversation below as the assistant. Follow SYSTEM instructions and treat TOOL RESULT blocks as observations. Return only the next assistant response. Do not repeat transcript labels or tool results.\n\n"
+const (
+	webChatTranscriptPreamble = "Continue the reconstructed conversation below as the assistant. The prose that introduces system instructions, user messages, prior assistant messages, and tool results is scaffolding only. Never reproduce those scaffolding phrases in the response. Treat tool results as observations, preserve any DSML tool-call syntax exactly when a tool call is required, and otherwise return only the next assistant response.\n\n"
+	nextAssistantCue          = "Now produce only the next assistant response."
+)
 
 var deepSeekPromptMarkers = []string{
 	"<|begin▁of▁sentence|>",
@@ -19,10 +22,31 @@ var hardOutputProtocolBoundaries = []string{
 	"<|begin▁of▁sentence|>",
 	"<|System|>",
 	"<|User|>",
+	"<|Assistant|>",
 	"<|Tool|>",
 	"<|end▁of▁sentence|>",
 	"<|end▁of▁toolresults|>",
 	"<|end▁of▁instructions|>",
+}
+
+// softOutputReplayBoundaries cover both the first-generation bracket labels
+// and the natural-language scaffolding used by adaptPromptForWebChat. They are
+// only treated as boundaries at the start of an output line, which avoids
+// truncating ordinary prose that happens to mention one of these phrases.
+var softOutputReplayBoundaries = []string{
+	"[SYSTEM]",
+	"[/SYSTEM]",
+	"[USER]",
+	"[ASSISTANT]",
+	"[TOOL RESULT]",
+	"[/TOOL RESULT]",
+	"System instructions follow:",
+	"End of system instructions.",
+	"User message follows:",
+	"Prior assistant message follows:",
+	"Result from the previously requested tool follows:",
+	"End of tool result.",
+	nextAssistantCue,
 }
 
 // adaptPromptForWebChat converts DS2API's DeepSeek chat-template markers into a
@@ -34,17 +58,28 @@ func adaptPromptForWebChat(prompt string) string {
 	if !containsDeepSeekPromptMarker(prompt) {
 		return prompt
 	}
+
+	trimmed := strings.TrimSpace(prompt)
+	endsWithAssistantCue := strings.HasSuffix(trimmed, "<|Assistant|>")
+	if endsWithAssistantCue {
+		trimmed = strings.TrimSpace(strings.TrimSuffix(trimmed, "<|Assistant|>"))
+	}
+
 	replacer := strings.NewReplacer(
 		"<|begin▁of▁sentence|>", "",
-		"<|System|>", "\n[SYSTEM]\n",
-		"<|end▁of▁instructions|>", "\n[/SYSTEM]\n",
-		"<|User|>", "\n[USER]\n",
-		"<|Assistant|>", "\n[ASSISTANT]\n",
-		"<|Tool|>", "\n[TOOL RESULT]\n",
-		"<|end▁of▁toolresults|>", "\n[/TOOL RESULT]\n",
+		"<|System|>", "\nSystem instructions follow:\n",
+		"<|end▁of▁instructions|>", "\nEnd of system instructions.\n",
+		"<|User|>", "\nUser message follows:\n",
+		"<|Assistant|>", "\nPrior assistant message follows:\n",
+		"<|Tool|>", "\nResult from the previously requested tool follows:\n",
+		"<|end▁of▁toolresults|>", "\nEnd of tool result.\n",
 		"<|end▁of▁sentence|>", "\n",
 	)
-	return webChatTranscriptPreamble + strings.TrimSpace(replacer.Replace(prompt))
+	adapted := strings.TrimSpace(replacer.Replace(trimmed))
+	if endsWithAssistantCue {
+		adapted += "\n\n" + nextAssistantCue
+	}
+	return webChatTranscriptPreamble + adapted
 }
 
 func containsDeepSeekPromptMarker(prompt string) bool {
@@ -57,8 +92,9 @@ func containsDeepSeekPromptMarker(prompt string) bool {
 }
 
 // protocolBoundaryFilter is a defensive output guard. If the web model starts
-// replaying DS2API's internal transcript protocol, content from the first hard
-// boundary onward is discarded instead of being exposed as assistant text.
+// replaying DS2API's internal transcript protocol or the web-chat scaffolding,
+// content from the first boundary onward is discarded instead of being exposed
+// as assistant text.
 type protocolBoundaryFilter struct {
 	pending string
 	stopped bool
@@ -74,7 +110,7 @@ func (f *protocolBoundaryFilter) Feed(chunk string) string {
 		f.stopped = true
 		return data[:idx]
 	}
-	keep := longestSuffixMatchingAnyPrefix(data, hardOutputProtocolBoundaries)
+	keep := longestSuffixMatchingAnyPrefix(data, outputBoundaryPrefixes())
 	if keep > 0 {
 		f.pending = data[len(data)-keep:]
 		data = data[:len(data)-keep]
@@ -93,13 +129,67 @@ func (f *protocolBoundaryFilter) Flush() string {
 }
 
 func firstProtocolBoundary(data string) int {
+	first := firstSubstring(data, hardOutputProtocolBoundaries)
+	if soft := firstLineBoundarySubstring(data, softOutputReplayBoundaries); soft >= 0 && (first < 0 || soft < first) {
+		first = soft
+	}
+	return first
+}
+
+func firstSubstring(data string, markers []string) int {
 	first := -1
-	for _, marker := range hardOutputProtocolBoundaries {
+	for _, marker := range markers {
 		if idx := strings.Index(data, marker); idx >= 0 && (first < 0 || idx < first) {
 			first = idx
 		}
 	}
 	return first
+}
+
+func firstLineBoundarySubstring(data string, markers []string) int {
+	first := -1
+	for _, marker := range markers {
+		start := 0
+		for start < len(data) {
+			rel := strings.Index(data[start:], marker)
+			if rel < 0 {
+				break
+			}
+			idx := start + rel
+			if isOutputLineBoundary(data, idx) {
+				if first < 0 || idx < first {
+					first = idx
+				}
+				break
+			}
+			start = idx + 1
+		}
+	}
+	return first
+}
+
+func isOutputLineBoundary(data string, idx int) bool {
+	if idx <= 0 {
+		return true
+	}
+	for i := idx - 1; i >= 0; i-- {
+		switch data[i] {
+		case ' ', '\t', '\r':
+			continue
+		case '\n':
+			return true
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func outputBoundaryPrefixes() []string {
+	out := make([]string, 0, len(hardOutputProtocolBoundaries)+len(softOutputReplayBoundaries))
+	out = append(out, hardOutputProtocolBoundaries...)
+	out = append(out, softOutputReplayBoundaries...)
+	return out
 }
 
 func longestSuffixMatchingAnyPrefix(data string, markers []string) int {
