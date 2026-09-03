@@ -153,16 +153,6 @@ func (s *responsesStreamRuntime) ensureToolCallID(callIndex int) string {
 	return id
 }
 
-func (s *responsesStreamRuntime) resetStreamToolCallState() {
-	s.streamToolCallIDs = map[int]string{}
-	s.functionItemIDs = map[int]string{}
-	s.functionOutputIDs = map[int]int{}
-	s.functionArgs = map[int]string{}
-	s.functionDone = map[int]bool{}
-	s.functionAdded = map[int]bool{}
-	s.functionNames = map[int]string{}
-}
-
 func (s *responsesStreamRuntime) completedFunctionCallCount() int {
 	count := 0
 	for _, done := range s.functionDone {
