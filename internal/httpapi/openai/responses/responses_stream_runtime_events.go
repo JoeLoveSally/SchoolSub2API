@@ -41,7 +41,7 @@ func (s *responsesStreamRuntime) sendDone() {
 	}
 }
 
-func (s *responsesStreamRuntime) processToolStreamEvents(events []toolstream.Event, emitContent bool, resetAfterToolCalls bool) {
+func (s *responsesStreamRuntime) processToolStreamEvents(events []toolstream.Event, emitContent bool, _ bool) {
 	for _, evt := range events {
 		if emitContent && evt.Content != "" {
 			cleaned := cleanVisibleOutput(evt.Content, s.stripReferenceMarkers)
@@ -57,13 +57,14 @@ func (s *responsesStreamRuntime) processToolStreamEvents(events []toolstream.Eve
 			if len(filtered) == 0 {
 				continue
 			}
-			s.emitFunctionCallDeltaEvents(filtered)
+			s.emitFunctionCallDeltaEvents(s.offsetFunctionCallDeltas(filtered))
 		}
 		if len(evt.ToolCalls) > 0 {
+			// Keep completed function-call identity maps for the lifetime of the
+			// response. Later tool blocks are assigned a global call index instead
+			// of resetting index 0, so response.completed can reuse the exact
+			// item_id/call_id values already emitted in streaming events.
 			s.emitFunctionCallDoneEvents(evt.ToolCalls)
-			if resetAfterToolCalls {
-				s.resetStreamToolCallState()
-			}
 		}
 	}
 }
