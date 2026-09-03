@@ -11,19 +11,10 @@ import (
 )
 
 type apiUpstream struct {
-	Store        shared.ConfigReader
 	Auth         shared.AuthResolver
 	DS           shared.DeepSeekCaller
 	HKUSTEnabled bool
 	HKUSTModel   string
-}
-
-type hkustConfigReader struct {
-	shared.ConfigReader
-}
-
-func (hkustConfigReader) CurrentInputFileEnabled() bool {
-	return false
 }
 
 func selectAPIUpstream(store *config.Store, resolver *auth.Resolver, dsClient *dsclient.Client) (apiUpstream, error) {
@@ -32,10 +23,9 @@ func selectAPIUpstream(store *config.Store, resolver *auth.Resolver, dsClient *d
 		return apiUpstream{}, fmt.Errorf("load HKUST upstream config: %w", err)
 	}
 	if !enabled {
-		return apiUpstream{Store: store, Auth: resolver, DS: dsClient}, nil
+		return apiUpstream{Auth: resolver, DS: dsClient}, nil
 	}
 	return apiUpstream{
-		Store:        hkustConfigReader{ConfigReader: store},
 		Auth:         hkust.NewResolver(store),
 		DS:           hkust.NewClient(cfg),
 		HKUSTEnabled: true,
