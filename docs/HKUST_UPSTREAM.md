@@ -57,7 +57,9 @@ wss://aigc.hkust-gz.edu.cn/chat/new
   &enableThinking=
 ```
 
-DS2API's already-normalized `FinalPrompt` is sent as the WebSocket text message.
+DS2API still builds the complete PromptCompat `FinalPrompt`, but the HKUST transport does not send DeepSeek's internal chat-template control tokens verbatim. The school endpoint accepts a normal web-chat text message and applies its own conversation template, so raw markers such as `<|System|>`, `<|User|>`, `<|Tool|>`, and `<|end▁of▁sentence|>` would double-template the request and can cause transcript/tool-result replay.
+
+At the HKUST boundary those role markers are converted into a neutral plain-text transcript (`[SYSTEM]`, `[USER]`, `[ASSISTANT]`, `[TOOL RESULT]`). DSML tool-call syntax is preserved unchanged so the existing prompt-based tool parser continues to work. A defensive stream filter also stops output if the model starts replaying internal DeepSeek role-boundary markers.
 
 Observed upstream frames:
 
@@ -92,7 +94,9 @@ The synthetic DS2API session ID is only an internal compatibility value. HKUST s
 
 No native HKUST tool-call channel has been observed. Tool calling therefore continues to use DS2API's existing PromptCompat / prompt-based tool-call protocol and parser.
 
-The upstream adapter deliberately does not implement its own tool schema or parser. This keeps Codex/Responses behavior in the shared DS2API compatibility path.
+The upstream adapter deliberately does not implement its own tool schema or parser. This keeps Codex/Responses/Claude behavior in the shared DS2API compatibility path.
+
+Claude's top-level `system` field may be either a string or an array of text content blocks. Both forms are normalized before PromptCompat construction so Claude Code environment metadata such as its working directory is retained when tool instructions are merged.
 
 ## Current limitations
 
@@ -129,4 +133,4 @@ curl -N http://127.0.0.1:5001/v1/responses \
   -d '{"model":"deepseek-v4-pro","stream":true,"input":"只回复 RESPONSES_OK"}'
 ```
 
-After those pass, the next acceptance test is a prompt-based tool loop through `/v1/responses` using a deterministic test function before connecting Codex.
+After those pass, verify a prompt-based tool loop through `/v1/responses` or `/v1/messages`, then run a real Claude Code tool sequence such as `pwd` -> `Read` -> `Bash` and confirm that no internal DeepSeek role markers appear in client-visible output.
