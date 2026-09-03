@@ -59,7 +59,9 @@ wss://aigc.hkust-gz.edu.cn/chat/new
 
 DS2API still builds the complete PromptCompat `FinalPrompt`, but the HKUST transport does not send DeepSeek's internal chat-template control tokens verbatim. The school endpoint accepts a normal web-chat text message and applies its own conversation template, so raw markers such as `<|System|>`, `<|User|>`, `<|Tool|>`, and `<|end▁of▁sentence|>` would double-template the request and can cause transcript/tool-result replay.
 
-At the HKUST boundary those role markers are converted into a neutral plain-text transcript (`[SYSTEM]`, `[USER]`, `[ASSISTANT]`, `[TOOL RESULT]`). DSML tool-call syntax is preserved unchanged so the existing prompt-based tool parser continues to work. A defensive stream filter also stops output if the model starts replaying internal DeepSeek role-boundary markers.
+At the HKUST boundary those role markers are converted into a natural-language transcript such as `System instructions follow:`, `User message follows:`, and `Result from the previously requested tool follows:`. The final synthetic `<|Assistant|>` cue is converted into an explicit request for only the next assistant response. DSML tool-call syntax is preserved unchanged so the existing prompt-based tool parser continues to work.
+
+The prompt preamble tells the model that transcript scaffolding is context only and must not be reproduced. A defensive stream filter also stops output if the model starts replaying either DeepSeek's internal role markers or known transcript scaffolding at an output line boundary. Legacy bracket labels such as `[TOOL RESULT]` are filtered as well so older adapted turns cannot leak into Claude Code output.
 
 Observed upstream frames:
 
@@ -98,6 +100,8 @@ The upstream adapter deliberately does not implement its own tool schema or pars
 
 Claude's top-level `system` field may be either a string or an array of text content blocks. Both forms are normalized before PromptCompat construction so Claude Code environment metadata such as its working directory is retained when tool instructions are merged.
 
+DSML is preserved byte-for-byte by the HKUST prompt adaptation layer. Regression coverage includes shell commands containing significant whitespace such as `git checkout HEAD -- src/config/config.yaml`; if a generated command is malformed before parsing, that remains a model-generation error rather than an adapter rewrite.
+
 ## Current limitations
 
 - HKUST file upload is not implemented; requests requiring upstream file upload return an unsupported error.
@@ -133,4 +137,4 @@ curl -N http://127.0.0.1:5001/v1/responses \
   -d '{"model":"deepseek-v4-pro","stream":true,"input":"只回复 RESPONSES_OK"}'
 ```
 
-After those pass, verify a prompt-based tool loop through `/v1/responses` or `/v1/messages`, then run a real Claude Code tool sequence such as `pwd` -> `Read` -> `Bash` and confirm that no internal DeepSeek role markers appear in client-visible output.
+After those pass, verify a prompt-based tool loop through `/v1/responses` or `/v1/messages`, then run a real Claude Code tool sequence such as `pwd` -> `Read` -> `Edit` -> `git diff` -> restore. Client-visible output must not contain DeepSeek role markers, transcript scaffolding, or replayed tool-result labels.
