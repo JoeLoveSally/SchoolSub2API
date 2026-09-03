@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"ds2api/internal/claudeconv"
 	"ds2api/internal/config"
 	"ds2api/internal/prompt"
 	"ds2api/internal/promptcompat"
@@ -74,8 +75,10 @@ func injectClaudeToolPrompt(payload map[string]any, normalizedMessages []any, to
 		return normalizedMessages
 	}
 
-	// Prefer top-level Anthropic-style system prompt when available.
-	if systemText, ok := payload["system"].(string); ok && strings.TrimSpace(systemText) != "" {
+	// Claude Code commonly sends the top-level system prompt as content blocks.
+	// Normalize those blocks before merging tool instructions so environment
+	// details such as cwd are not silently discarded.
+	if systemText := claudeconv.NormalizeSystemContent(payload["system"]); systemText != "" {
 		payload["system"] = mergeSystemPrompt(systemText, toolPrompt)
 		return normalizedMessages
 	}
