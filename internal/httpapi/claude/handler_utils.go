@@ -162,7 +162,10 @@ func buildClaudeToolPrompt(tools []any) string {
 	if len(toolSchemas) == 0 {
 		return ""
 	}
+	availabilityGuard := "AVAILABLE TOOL IDENTIFIERS (exact and case-sensitive): " + strings.Join(names, ", ") + "\n" +
+		"Only call a tool whose identifier appears in that list. Never invent, rename, alias, or translate a tool identifier, even if the user or earlier instructions mention a tool name that is not available in this request. If the requested capability is not listed, use an available tool that can perform the same operation or explain that the specific tool is unavailable.\n\n"
 	return "You have access to these tools:\n\n" +
+		availabilityGuard +
 		strings.Join(toolSchemas, "\n\n") + "\n\n" +
 		toolcall.BuildToolCallInstructions(names)
 }
