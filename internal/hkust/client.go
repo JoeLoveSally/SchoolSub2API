@@ -152,10 +152,10 @@ func (c *Client) pumpStream(ctx context.Context, ws *websocket.Conn, writer *io.
 		var raw []byte
 		if err := websocket.Message.Receive(ws, &raw); err != nil {
 			if ctx.Err() != nil {
-				_ = writer.CloseWithError(ctx.Err())
+				closePipeWithError(writer, ctx.Err())
 				return
 			}
-			_ = writer.CloseWithError(c.redactedError("receive HKUST websocket frame", err))
+			closePipeWithError(writer, c.redactedError("receive HKUST websocket frame", err))
 			return
 		}
 		message := string(raw)
@@ -174,16 +174,16 @@ func (c *Client) pumpStream(ctx context.Context, ws *websocket.Conn, writer *io.
 			continue
 		case "middle":
 			if err := writeSegments(writer, splitter.Feed(frame.Content)); err != nil {
-				_ = writer.CloseWithError(err)
+				closePipeWithError(writer, err)
 				return
 			}
 		case "end":
 			if err := writeSegments(writer, splitter.Flush()); err != nil {
-				_ = writer.CloseWithError(err)
+				closePipeWithError(writer, err)
 				return
 			}
 			if err := writeSSE(writer, "response/status", "FINISHED"); err != nil {
-				_ = writer.CloseWithError(err)
+				closePipeWithError(writer, err)
 				return
 			}
 			if err := writer.Close(); err != nil {
@@ -191,6 +191,15 @@ func (c *Client) pumpStream(ctx context.Context, ws *websocket.Conn, writer *io.
 			}
 			return
 		}
+	}
+}
+
+func closePipeWithError(writer *io.PipeWriter, streamErr error) {
+	if writer == nil {
+		return
+	}
+	if err := writer.CloseWithError(streamErr); err != nil {
+		config.Logger.Warn("[hkust] response pipe close failed", "error", err)
 	}
 }
 
