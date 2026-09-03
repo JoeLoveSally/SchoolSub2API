@@ -146,6 +146,12 @@ func (s *Store) AutoDeleteSessions() bool {
 }
 
 func (s *Store) CurrentInputFileEnabled() bool {
+	// HKUST's web-chat transport does not expose DeepSeek's file-upload API.
+	// Disable the offload optimization without mutating the persisted config;
+	// the complete PromptCompat transcript will remain in the live prompt.
+	if strings.TrimSpace(os.Getenv("HKUST_TOKEN")) != "" && strings.TrimSpace(os.Getenv("HKUST_USE_API")) != "" {
+		return false
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.cfg.CurrentInputFile.Enabled == nil {
