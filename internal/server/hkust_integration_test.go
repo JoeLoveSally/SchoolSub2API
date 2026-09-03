@@ -26,9 +26,18 @@ func TestHKUSTUpstreamServesOpenAIChatAndResponsesWithoutDeepSeekAccounts(t *tes
 			if !strings.Contains(prompt, "hello") {
 				t.Errorf("upstream prompt = %q, want it to contain hello", prompt)
 			}
+
+			content := "OK"
+			if strings.Contains(prompt, "lookup_secret") {
+				content = `<|DSML|tool_calls>
+<|DSML|invoke name="lookup_secret">
+<|DSML|parameter name="key"><![CDATA[vault-7]]></|DSML|parameter>
+</|DSML|invoke>
+</|DSML|tool_calls>`
+			}
 			for _, frame := range [][]byte{
 				[]byte(`{"type":"start","content":""}`),
-				[]byte(`{"type":"middle","content":"OK"}`),
+				[]byte(`{"type":"middle","content":` + mustJSONQuote(content) + `}`),
 				[]byte(`{"type":"end","content":""}`),
 			} {
 				if err := websocket.Message.Send(ws, frame); err != nil {
@@ -94,6 +103,55 @@ func TestHKUSTUpstreamServesOpenAIChatAndResponsesWithoutDeepSeekAccounts(t *tes
 			t.Fatalf("responses response missing OK: %s", recorder.Body.String())
 		}
 	})
+
+	t.Run("prompt tool call", func(t *testing.T) {
+		body := `{
+  "model":"deepseek-v4-pro",
+  "messages":[{"role":"user","content":"hello, use lookup_secret for vault-7"}],
+  "tools":[{
+    "type":"function",
+    "function":{
+      "name":"lookup_secret",
+      "description":"look up a secret by key",
+      "parameters":{
+        "type":"object",
+        "properties":{"key":{"type":"string"}},
+        "required":["key"]
+      }
+    }
+  }],
+  "tool_choice":"required"
+}`
+		recorder := serveHKUSTTestRequest(t, app.Router, "/v1/chat/completions", body)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+		}
+		var response map[string]any
+		if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+			t.Fatalf("decode tool response: %v; body=%s", err, recorder.Body.String())
+		}
+		choices, _ := response["choices"].([]any)
+		if len(choices) != 1 {
+			t.Fatalf("choices = %#v", response["choices"])
+		}
+		choice, _ := choices[0].(map[string]any)
+		if choice["finish_reason"] != "tool_calls" {
+			t.Fatalf("finish_reason = %#v, body=%s", choice["finish_reason"], recorder.Body.String())
+		}
+		message, _ := choice["message"].(map[string]any)
+		toolCalls, _ := message["tool_calls"].([]any)
+		if len(toolCalls) != 1 || !strings.Contains(recorder.Body.String(), "lookup_secret") || !strings.Contains(recorder.Body.String(), "vault-7") {
+			t.Fatalf("tool_calls = %#v, body=%s", toolCalls, recorder.Body.String())
+		}
+	})
+}
+
+func mustJSONQuote(value string) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
+	return string(encoded)
 }
 
 func serveHKUSTTestRequest(t *testing.T, handler http.Handler, path, body string) *httptest.ResponseRecorder {
