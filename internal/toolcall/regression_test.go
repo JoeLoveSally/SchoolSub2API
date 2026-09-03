@@ -53,6 +53,14 @@ echo "hello"
 			}},
 		},
 		{
+			name: "DSML CDATA shell command preserves option separator whitespace",
+			text: `<|DSML|tool_calls><|DSML|invoke name="Bash"><|DSML|parameter name="command"><![CDATA[git checkout HEAD -- src/config/config.yaml]]></|DSML|parameter></|DSML|invoke></|DSML|tool_calls>`,
+			expected: []ParsedToolCall{{
+				Name:  "Bash",
+				Input: map[string]any{"command": "git checkout HEAD -- src/config/config.yaml"},
+			}},
+		},
+		{
 			name: "Mixed JSON inside CDATA (New Hybrid Case)",
 			text: `<tool_calls><invoke name="foo"><parameter name="json_param"><![CDATA[works]]></parameter></invoke></tool_calls>`,
 			expected: []ParsedToolCall{{
@@ -64,7 +72,7 @@ echo "hello"
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ParseToolCalls(tt.text, []string{"foo", "write_file", "bash"})
+			got := ParseToolCalls(tt.text, []string{"foo", "write_file", "bash", "Bash"})
 			if len(got) != len(tt.expected) {
 				t.Fatalf("expected %d calls, got %d", len(tt.expected), len(got))
 			}
