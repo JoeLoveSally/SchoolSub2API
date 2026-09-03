@@ -163,6 +163,29 @@ func (s *responsesStreamRuntime) resetStreamToolCallState() {
 	s.functionNames = map[int]string{}
 }
 
+func (s *responsesStreamRuntime) completedFunctionCallCount() int {
+	count := 0
+	for _, done := range s.functionDone {
+		if done {
+			count++
+		}
+	}
+	return count
+}
+
+func (s *responsesStreamRuntime) offsetFunctionCallDeltas(deltas []toolstream.ToolCallDelta) []toolstream.ToolCallDelta {
+	base := s.completedFunctionCallCount()
+	if base == 0 || len(deltas) == 0 {
+		return deltas
+	}
+	out := make([]toolstream.ToolCallDelta, len(deltas))
+	copy(out, deltas)
+	for i := range out {
+		out[i].Index += base
+	}
+	return out
+}
+
 func (s *responsesStreamRuntime) ensureFunctionOutputIndex(callIndex int) int {
 	if idx, ok := s.functionOutputIDs[callIndex]; ok {
 		return idx
@@ -221,10 +244,12 @@ func (s *responsesStreamRuntime) emitFunctionCallDeltaEvents(deltas []toolstream
 
 func (s *responsesStreamRuntime) emitFunctionCallDoneEvents(calls []toolcall.ParsedToolCall) {
 	normalizedCalls := toolcall.NormalizeParsedToolCallsForSchemas(calls, s.toolsRaw)
-	for idx, tc := range normalizedCalls {
+	base := s.completedFunctionCallCount()
+	for localIdx, tc := range normalizedCalls {
 		if strings.TrimSpace(tc.Name) == "" {
 			continue
 		}
+		idx := base + localIdx
 		s.ensureFunctionItemAdded(idx, tc.Name)
 		if s.functionDone[idx] {
 			continue
