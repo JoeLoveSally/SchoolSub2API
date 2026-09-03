@@ -1,0 +1,19 @@
+{
+  "_comment": "Minimal DS2API config for the HKUST(GZ) WebSocket upstream. Copy to config.json and change the API key.",
+  "keys": [
+    "change-this-ds2api-key"
+  ],
+  "model_aliases": {
+    "gpt-5.3-codex": "deepseek-v4-pro",
+    "codex-mini-latest": "deepseek-v4-pro"
+  },
+  "responses": {
+    "store_ttl_seconds": 900
+  },
+  "embeddings": {
+    "provider": "deterministic"
+  },
+  "auto_delete": {
+    "mode": "none"
+  }
+}
