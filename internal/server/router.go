@@ -52,7 +52,13 @@ func NewApp() (*App, error) {
 		return dsClient.Login(ctx, acc)
 	})
 	dsClient = dsclient.NewClient(store, resolver)
-	if err := dsClient.PreloadPow(context.Background()); err != nil {
+	upstream, err := selectAPIUpstream(store, resolver, dsClient)
+	if err != nil {
+		return nil, err
+	}
+	if upstream.HKUSTEnabled {
+		config.Logger.Info("[hkust] web chat upstream ready", "model", upstream.HKUSTModel)
+	} else if err := dsClient.PreloadPow(context.Background()); err != nil {
 		config.Logger.Warn("[PoW] init failed", "error", err)
 	} else {
 		config.Logger.Info("[PoW] pure Go solver ready")
@@ -63,12 +69,12 @@ func NewApp() (*App, error) {
 	}
 
 	modelsHandler := &shared.ModelsHandler{Store: store}
-	chatHandler := &chat.Handler{Store: store, Auth: resolver, DS: dsClient, ChatHistory: chatHistoryStore}
-	responsesHandler := &responses.Handler{Store: store, Auth: resolver, DS: dsClient, ChatHistory: chatHistoryStore}
-	filesHandler := &files.Handler{Store: store, Auth: resolver, DS: dsClient, ChatHistory: chatHistoryStore}
-	embeddingsHandler := &embeddings.Handler{Store: store, Auth: resolver, DS: dsClient, ChatHistory: chatHistoryStore}
-	claudeHandler := &claude.Handler{Store: store, Auth: resolver, DS: dsClient, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
-	geminiHandler := &gemini.Handler{Store: store, Auth: resolver, DS: dsClient, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
+	chatHandler := &chat.Handler{Store: store, Auth: upstream.Auth, DS: upstream.DS, ChatHistory: chatHistoryStore}
+	responsesHandler := &responses.Handler{Store: store, Auth: upstream.Auth, DS: upstream.DS, ChatHistory: chatHistoryStore}
+	filesHandler := &files.Handler{Store: store, Auth: upstream.Auth, DS: upstream.DS, ChatHistory: chatHistoryStore}
+	embeddingsHandler := &embeddings.Handler{Store: store, Auth: upstream.Auth, DS: upstream.DS, ChatHistory: chatHistoryStore}
+	claudeHandler := &claude.Handler{Store: store, Auth: upstream.Auth, DS: upstream.DS, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
+	geminiHandler := &gemini.Handler{Store: store, Auth: upstream.Auth, DS: upstream.DS, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
 	adminHandler := &admin.Handler{Store: store, Pool: pool, DS: dsClient, OpenAI: chatHandler, ChatHistory: chatHistoryStore}
 	ollamaHandler := &ollama.Handler{Store: store}
 	webuiHandler := webui.NewHandler()
