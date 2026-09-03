@@ -58,6 +58,7 @@ func (c *Client) CallCompletion(ctx context.Context, _ *auth.RequestAuth, payloa
 	if strings.TrimSpace(prompt) == "" {
 		return nil, errors.New("HKUST completion prompt is empty")
 	}
+	prompt = adaptPromptForWebChat(prompt)
 
 	endpoint, err := c.completionURL(uuid.NewString())
 	if err != nil {
@@ -148,6 +149,7 @@ func (c *Client) pumpStream(ctx context.Context, ws *websocket.Conn, writer *io.
 	go c.heartbeat(ws, done, closeWS)
 
 	splitter := thinkSplitter{}
+	protocolFilter := protocolBoundaryFilter{}
 	for {
 		var raw []byte
 		if err := websocket.Message.Receive(ws, &raw); err != nil {
@@ -173,11 +175,18 @@ func (c *Client) pumpStream(ctx context.Context, ws *websocket.Conn, writer *io.
 		case "start":
 			continue
 		case "middle":
-			if err := writeSegments(writer, splitter.Feed(frame.Content)); err != nil {
+			safeContent := protocolFilter.Feed(frame.Content)
+			if err := writeSegments(writer, splitter.Feed(safeContent)); err != nil {
 				closePipeWithError(writer, err)
 				return
 			}
 		case "end":
+			if tail := protocolFilter.Flush(); tail != "" {
+				if err := writeSegments(writer, splitter.Feed(tail)); err != nil {
+					closePipeWithError(writer, err)
+					return
+				}
+			}
 			if err := writeSegments(writer, splitter.Flush()); err != nil {
 				closePipeWithError(writer, err)
 				return
