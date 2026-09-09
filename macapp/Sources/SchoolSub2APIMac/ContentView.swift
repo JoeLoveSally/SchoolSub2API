@@ -5,7 +5,7 @@ struct ContentView: View {
     @EnvironmentObject private var controller: ProxyController
     @State private var token = ""
     @State private var useAPI = ""
-    @State private var selectedModel: HKUSTModel = .deepSeekFlash
+    @State private var selectedModel: HKUSTModel = .defaultModel
     @State private var showSuccess = false
 
     var body: some View {
@@ -39,7 +39,7 @@ struct ContentView: View {
                 .font(.title.bold())
             Text("HKUST Web Chat → 本地 OpenAI 兼容代理")
                 .foregroundStyle(.secondary)
-            Text("默认 DeepSeek V4 Flash；可切换 HKUST 已验证模型")
+            Text("默认 GLM-5.2；可切换 HKUST 已验证模型")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

@@ -1,79 +1,89 @@
 import Foundation
-import Security
 
 enum LocalAPIKeyStore {
-    private static let service = "com.joelovesally.SchoolSub2API"
-    private static let account = "local-proxy-api-key"
+    private static let directoryName = "JoeJoeProxy"
+    private static let fileName = "local_api_key"
 
-    static func loadOrCreate() throws -> String {
-        if let existing = try read(), !existing.isEmpty {
+    static func loadOrCreate(applicationSupportDirectory: URL? = nil) throws -> String {
+        let fileURL = try keyURL(applicationSupportDirectory: applicationSupportDirectory)
+        if let existing = try read(from: fileURL), !existing.isEmpty {
             return existing
         }
-        let created = try generate()
-        try save(created)
+
+        let created = generate()
+        try save(created, to: fileURL)
         return created
     }
 
-    private static func read() throws -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-        var result: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound {
+    private static func keyURL(applicationSupportDirectory: URL?) throws -> URL {
+        let base: URL
+        if let applicationSupportDirectory {
+            base = applicationSupportDirectory
+        } else {
+            guard let resolved = FileManager.default.urls(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask
+            ).first else {
+                throw storeError("Unable to locate Application Support directory.")
+            }
+            base = resolved
+        }
+
+        let directory = base.appendingPathComponent(directoryName, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: directory.path
+        )
+        return directory.appendingPathComponent(fileName, isDirectory: false)
+    }
+
+    private static func read(from fileURL: URL) throws -> String? {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: fileURL.path) else {
             return nil
         }
-        guard status == errSecSuccess else {
-            throw keychainError(status)
+
+        try fileManager.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: fileURL.path
+        )
+        let data = try Data(contentsOf: fileURL)
+        guard let value = String(data: data, encoding: .utf8) else {
+            throw storeError("Unable to decode the local API key file.")
         }
-        guard let data = result as? Data,
-              let value = String(data: data, encoding: .utf8) else {
-            throw NSError(
-                domain: "SchoolSub2API.Keychain",
-                code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "Unable to decode local API key from Keychain."]
-            )
-        }
-        return value
+        let cleanValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleanValue.isEmpty ? nil : cleanValue
     }
 
-    private static func save(_ value: String) throws {
-        let data = Data(value.utf8)
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
-        let attributes: [String: Any] = [kSecValueData as String: data]
-        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        if updateStatus == errSecSuccess {
-            return
+    private static func save(_ value: String, to fileURL: URL) throws {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: fileURL.path) {
+            try fileManager.removeItem(at: fileURL)
         }
-        if updateStatus != errSecItemNotFound {
-            throw keychainError(updateStatus)
+
+        let created = fileManager.createFile(
+            atPath: fileURL.path,
+            contents: Data(value.utf8),
+            attributes: [.posixPermissions: 0o600]
+        )
+        guard created else {
+            throw storeError("Unable to create the local API key file.")
         }
-        var addQuery = query
-        addQuery[kSecValueData as String] = data
-        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-        guard addStatus == errSecSuccess else {
-            throw keychainError(addStatus)
-        }
+        try fileManager.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: fileURL.path
+        )
     }
 
-    private static func generate() throws -> String {
-        var bytes = [UInt8](repeating: 0, count: 24)
-        let status = bytes.withUnsafeMutableBytes { buffer in
-            guard let baseAddress = buffer.baseAddress else {
-                return errSecParam
-            }
-            return SecRandomCopyBytes(kSecRandomDefault, buffer.count, baseAddress)
-        }
-        guard status == errSecSuccess else {
-            throw keychainError(status)
+    private static func generate() -> String {
+        var generator = SystemRandomNumberGenerator()
+        let bytes = (0..<32).map { _ in
+            UInt8.random(in: UInt8.min...UInt8.max, using: &generator)
         }
         let token = Data(bytes)
             .base64EncodedString()
@@ -83,11 +93,10 @@ enum LocalAPIKeyStore {
         return "sk-local-\(token)"
     }
 
-    private static func keychainError(_ status: OSStatus) -> NSError {
-        let message = SecCopyErrorMessageString(status, nil) as String? ?? "Keychain error \(status)"
-        return NSError(
-            domain: "SchoolSub2API.Keychain",
-            code: Int(status),
+    private static func storeError(_ message: String) -> NSError {
+        NSError(
+            domain: "JoeJoeProxy.LocalAPIKeyStore",
+            code: 1,
             userInfo: [NSLocalizedDescriptionKey: message]
         )
     }

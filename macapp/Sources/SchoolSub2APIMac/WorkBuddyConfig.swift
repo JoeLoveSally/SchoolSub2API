@@ -1,10 +1,12 @@
 import Foundation
 
 enum HKUSTModel: String, CaseIterable, Identifiable {
-    case deepSeekFlash
     case glm52
+    case deepSeekFlash
     case deepSeekPro
     case kimiK3
+
+    static let defaultModel: HKUSTModel = .glm52
 
     var id: String { rawValue }
 
@@ -76,9 +78,9 @@ enum HKUSTModel: String, CaseIterable, Identifiable {
     var pickerLabel: String {
         switch self {
         case .deepSeekFlash:
-            return "DeepSeek V4 Flash · 262K · 推荐"
+            return "DeepSeek V4 Flash · 262K · 暂不可用"
         case .glm52:
-            return "GLM-5.2 · 220K"
+            return "GLM-5.2 · 220K · 推荐"
         case .deepSeekPro:
             return "DeepSeek V4 Pro · 65K"
         case .kimiK3:
@@ -89,14 +91,39 @@ enum HKUSTModel: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .deepSeekFlash:
-            return "学校网页正式模型；已实测 262,144 context，默认推荐。"
+            return "学校侧当前异常；暂不作为默认，恢复后仍可手动验证。"
         case .glm52:
-            return "已实测 220,000 context；可用，但长上下文请求通常比 Flash 慢。"
+            return "当前默认；已实测 220,000 context，长上下文请求通常比 Flash 慢。"
         case .deepSeekPro:
             return "已实测 65,535 context；长 Coding Agent 会话不推荐。"
         case .kimiK3:
             return "HKUST WebSocket 已实测可用，但网页 UI 未公开；按 262K 保守配置。"
         }
+    }
+}
+
+enum LocalProxyConfig {
+    // These aliases only select DS2API's existing compatibility schema. The actual
+    // HKUST upstream model is controlled independently by HKUST_MODEL.
+    static let compatibilityAliases: [String: String] = [
+        HKUSTModel.glm52.workBuddyID: "deepseek-v4-flash",
+        HKUSTModel.kimiK3.workBuddyID: "deepseek-v4-flash"
+    ]
+
+    static func render(apiKey: String) throws -> String {
+        let root: [String: Any] = [
+            "keys": [apiKey],
+            "model_aliases": compatibilityAliases
+        ]
+        let data = try JSONSerialization.data(withJSONObject: root)
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw NSError(
+                domain: "JoeJoeProxy.LocalProxyConfig",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Unable to prepare local proxy configuration."]
+            )
+        }
+        return text
     }
 }
 

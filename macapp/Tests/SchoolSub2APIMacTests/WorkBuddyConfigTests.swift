@@ -1,7 +1,13 @@
+import Foundation
 import XCTest
 @testable import SchoolSub2APIMac
 
 final class WorkBuddyConfigTests: XCTestCase {
+    func testDefaultModelIsGLM52() {
+        XCTAssertEqual(HKUSTModel.defaultModel, .glm52)
+        XCTAssertEqual(HKUSTModel.allCases.first, .glm52)
+    }
+
     func testAllModelsRenderTheirOwnVariants() throws {
         for model in HKUSTModel.allCases {
             let rendered = try WorkBuddyConfig.render(
@@ -41,5 +47,39 @@ final class WorkBuddyConfigTests: XCTestCase {
         XCTAssertEqual(HKUSTModel.glm52.upstreamID, "GLM-5.2")
         XCTAssertEqual(HKUSTModel.deepSeekPro.upstreamID, "DeepSeek-V4-Pro-conv")
         XCTAssertEqual(HKUSTModel.kimiK3.upstreamID, "Kimi-K3")
+    }
+
+    func testLocalProxyConfigAcceptsGLMAndKimiModelIDs() throws {
+        let rendered = try LocalProxyConfig.render(apiKey: "sk-local-test")
+        let data = try XCTUnwrap(rendered.data(using: .utf8))
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let aliases = try XCTUnwrap(root["model_aliases"] as? [String: String])
+
+        XCTAssertEqual(aliases[HKUSTModel.glm52.workBuddyID], "deepseek-v4-flash")
+        XCTAssertEqual(aliases[HKUSTModel.kimiK3.workBuddyID], "deepseek-v4-flash")
+        XCTAssertEqual(root["keys"] as? [String], ["sk-local-test"])
+        XCTAssertNil(root["token"])
+        XCTAssertNil(root["useApi"])
+    }
+
+    func testLocalAPIKeyStoreUsesPrivateFileInsteadOfKeychain() throws {
+        let fileManager = FileManager.default
+        let base = fileManager.temporaryDirectory
+            .appendingPathComponent("JoeJoeProxyTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: base) }
+
+        let first = try LocalAPIKeyStore.loadOrCreate(applicationSupportDirectory: base)
+        let second = try LocalAPIKeyStore.loadOrCreate(applicationSupportDirectory: base)
+        XCTAssertEqual(first, second)
+        XCTAssertTrue(first.hasPrefix("sk-local-"))
+
+        let directory = base.appendingPathComponent("JoeJoeProxy", isDirectory: true)
+        let keyFile = directory.appendingPathComponent("local_api_key", isDirectory: false)
+        XCTAssertEqual(try String(contentsOf: keyFile, encoding: .utf8), first)
+
+        let directoryAttributes = try fileManager.attributesOfItem(atPath: directory.path)
+        let fileAttributes = try fileManager.attributesOfItem(atPath: keyFile.path)
+        XCTAssertEqual((directoryAttributes[.posixPermissions] as? NSNumber)?.intValue, 0o700)
+        XCTAssertEqual((fileAttributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
     }
 }

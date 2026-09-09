@@ -136,10 +136,7 @@ final class ProxyController: ObservableObject {
         }
 
         let runtimeDir = try runtimeDirectory()
-        let configData = try JSONSerialization.data(withJSONObject: ["keys": [apiKey]])
-        guard let configJSON = String(data: configData, encoding: .utf8) else {
-            throw launcherError("Unable to prepare local proxy configuration.")
-        }
+        let configJSON = try LocalProxyConfig.render(apiKey: apiKey)
 
         var environment = ProcessInfo.processInfo.environment
         environment["HKUST_TOKEN"] = token

@@ -9,7 +9,7 @@ import (
 const (
 	defaultEndpoint = "wss://aigc.hkust-gz.edu.cn/chat/new"
 	defaultOrigin   = "https://aigc.hkust-gz.edu.cn"
-	defaultModel    = "DeepSeek-V4-Pro-conv"
+	defaultModel    = "GLM-5.2"
 )
 
 type Config struct {

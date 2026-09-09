@@ -38,8 +38,27 @@ func TestLoadConfigFromEnvDefaults(t *testing.T) {
 	if cfg.Origin != defaultOrigin {
 		t.Fatalf("Origin = %q, want %q", cfg.Origin, defaultOrigin)
 	}
-	if cfg.Model != defaultModel {
-		t.Fatalf("Model = %q, want %q", cfg.Model, defaultModel)
+	if cfg.Model != "GLM-5.2" {
+		t.Fatalf("Model = %q, want GLM-5.2", cfg.Model)
+	}
+}
+
+func TestLoadConfigFromEnvModelOverride(t *testing.T) {
+	t.Setenv("HKUST_TOKEN", "token")
+	t.Setenv("HKUST_USE_API", "use-api")
+	t.Setenv("HKUST_WS_URL", "")
+	t.Setenv("HKUST_ORIGIN", "")
+	t.Setenv("HKUST_MODEL", "Kimi-K3")
+
+	cfg, enabled, err := LoadConfigFromEnv()
+	if err != nil {
+		t.Fatalf("LoadConfigFromEnv() error = %v", err)
+	}
+	if !enabled {
+		t.Fatal("LoadConfigFromEnv() enabled = false, want true")
+	}
+	if cfg.Model != "Kimi-K3" {
+		t.Fatalf("Model = %q, want Kimi-K3", cfg.Model)
 	}
 }
 
