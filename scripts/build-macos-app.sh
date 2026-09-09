@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARCH="${ARCH:-$(uname -m)}"
 OUT_DIR="${OUT_DIR:-$ROOT_DIR/dist/macos/$ARCH}"
-APP_NAME="SchoolSub2API"
+APP_NAME="JoeJoeProxy"
 APP_DIR="$OUT_DIR/$APP_NAME.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
@@ -36,6 +36,9 @@ echo "==> Building ds2api for darwin/$GOARCH"
     -o "$RESOURCES_DIR/ds2api" ./cmd/ds2api
 )
 chmod 755 "$RESOURCES_DIR/ds2api"
+
+echo "==> Building JoeJoeProxy app icon"
+bash "$ROOT_DIR/scripts/build-macos-icon.sh" "$RESOURCES_DIR/JoeJoeProxy.icns"
 
 echo "==> Building SwiftUI launcher for $ARCH"
 swift build \

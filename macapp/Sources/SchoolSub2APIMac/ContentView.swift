@@ -29,7 +29,7 @@ struct ContentView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("SchoolSub2API")
+            Text("JoeJoeProxy")
                 .font(.title.bold())
             Text("HKUST Web Chat → 本地 OpenAI 兼容代理")
                 .foregroundStyle(.secondary)

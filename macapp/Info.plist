@@ -5,15 +5,17 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>SchoolSub2API</string>
+    <string>JoeJoeProxy</string>
     <key>CFBundleExecutable</key>
     <string>SchoolSub2APIMac</string>
+    <key>CFBundleIconFile</key>
+    <string>JoeJoeProxy.icns</string>
     <key>CFBundleIdentifier</key>
     <string>com.joelovesally.SchoolSub2API</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>SchoolSub2API</string>
+    <string>JoeJoeProxy</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

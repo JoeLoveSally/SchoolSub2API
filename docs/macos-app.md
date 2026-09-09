@@ -1,10 +1,10 @@
-# macOS 本地代理 App
+# JoeJoeProxy macOS 本地代理 App
 
 `mac-app` 分支提供一个轻量 macOS SwiftUI 启动器，用来把已验证的 HKUST Web Chat 上游封装成本机 OpenAI 兼容代理。
 
 ## 用户流程
 
-1. 打开 `SchoolSub2API.app`。
+1. 打开 `JoeJoeProxy.app`。
 2. 手动输入 HKUST `token` 和 `useApi`。
 3. 点击“启动本地代理”。
 4. App 会启动内置 `ds2api`，固定使用 `DeepSeek-V4-Flash-conv`，并只监听 `127.0.0.1:5001`。
@@ -12,6 +12,24 @@
 6. 验证成功后弹窗提示，并展示可复制的 WorkBuddy `models.json` 配置。
 
 HKUST `token` / `useApi` 只通过子进程环境变量传给本机 `ds2api`，不会写入 App 配置文件。用于本机 Harness 鉴权的随机 API key 会保存在 macOS Keychain 中，以便 WorkBuddy 配置在 App 重启后保持稳定。
+
+## App 名称与图标
+
+应用显示名和窗口标题均为：
+
+```text
+JoeJoeProxy
+```
+
+构建时会优先从 HKUST(GZ) AIGC Service System 的 `favicon.ico` 获取网站图标并生成 macOS `JoeJoeProxy.icns`；如果该站点在构建环境中无法直接返回 favicon，则使用 Google favicon cache 获取同一域名的 favicon 作为回退。可通过 `MACAPP_ICON_URL` 覆盖图标来源。
+
+默认图标来源：
+
+```text
+https://aigc.hkust-gz.edu.cn/favicon.ico
+```
+
+图标仅用于这个个人本地代理工具的应用标识，不表示 HKUST(GZ) 对该工具的官方背书；分发时仍应遵守学校品牌标识相关规定。
 
 ## 固定模型
 
@@ -59,8 +77,8 @@ bash scripts/build-macos-app.sh
 当前机器是 Apple Silicon 时生成：
 
 ```text
-dist/macos/arm64/SchoolSub2API.app
-dist/macos/arm64/SchoolSub2API-macos-arm64.zip
+dist/macos/arm64/JoeJoeProxy.app
+dist/macos/arm64/JoeJoeProxy-macos-arm64.zip
 ```
 
 Intel Mac 对应 `x86_64` 目录。
@@ -72,7 +90,12 @@ Intel Mac 对应 `x86_64` 目录。
 - `macos-15`：arm64
 - `macos-15-intel`：x86_64
 
-构建两个可下载 Artifact。
+构建两个可下载 Artifact：
+
+```text
+JoeJoeProxy-macos-arm64
+JoeJoeProxy-macos-x86_64
+```
 
 当前构建只做 ad-hoc codesign，没有 Apple Developer ID notarization。因此直接分发给其他 Mac 时仍可能遇到 Gatekeeper 的“未识别开发者”提示。正式外部分发时应增加 Developer ID 签名和 Apple notarization。
 

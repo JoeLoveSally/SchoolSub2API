@@ -13,7 +13,7 @@ struct SchoolSub2APIMacApp: App {
     @StateObject private var controller = ProxyController.shared
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup("JoeJoeProxy") {
             ContentView()
                 .environmentObject(controller)
         }
