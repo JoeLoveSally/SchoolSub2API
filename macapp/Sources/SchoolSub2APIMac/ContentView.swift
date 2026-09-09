@@ -13,19 +13,24 @@ struct ContentView: View {
             header
             Divider()
 
-            if controller.status == .running {
+            if showsRunningView {
                 runningView
             } else {
                 credentialView
             }
         }
         .padding(24)
-        .frame(width: 720, height: controller.status == .running ? 690 : 470)
+        .frame(width: 720, height: showsRunningView ? 790 : 470)
         .alert("代理启动成功", isPresented: $showSuccess) {
             Button("好的", role: .cancel) {}
         } message: {
             Text("已通过 HKUST \(controller.activeModel?.displayName ?? selectedModel.displayName) 实际请求验证，本地代理正在 \(controller.proxyBaseURL) 运行。")
         }
+    }
+
+    private var showsRunningView: Bool {
+        controller.status == .running ||
+        (controller.status == .starting && controller.activeModel != nil)
     }
 
     private var header: some View {
@@ -98,7 +103,7 @@ struct ContentView: View {
     }
 
     private var runningView: some View {
-        let model = controller.activeModel ?? selectedModel
+        let activeModel = controller.activeModel ?? selectedModel
         return VStack(alignment: .leading, spacing: 14) {
             statusLine
 
@@ -113,12 +118,12 @@ struct ContentView: View {
                     GridRow {
                         Text("Model")
                             .foregroundStyle(.secondary)
-                        Text(model.upstreamID)
+                        Text(activeModel.upstreamID)
                     }
                     GridRow {
                         Text("Context")
                             .foregroundStyle(.secondary)
-                        Text("\(model.maxInputTokens.formatted()) tokens")
+                        Text("\(activeModel.maxInputTokens.formatted()) tokens")
                     }
                     GridRow {
                         Text("Bind")
@@ -129,15 +134,49 @@ struct ContentView: View {
                 .padding(8)
             }
 
+            GroupBox("切换模型") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Picker("模型", selection: $selectedModel) {
+                        ForEach(HKUSTModel.allCases) { model in
+                            Text(model.pickerLabel).tag(model)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .disabled(controller.status == .starting)
+
+                    Text(selectedModel.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    HStack {
+                        Spacer()
+                        Button(controller.status == .starting ? "正在切换…" : "切换模型并重启代理") {
+                            Task {
+                                let succeeded = await controller.switchModel(to: selectedModel)
+                                if succeeded {
+                                    showSuccess = true
+                                }
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(
+                            controller.status == .starting ||
+                            selectedModel == controller.activeModel
+                        )
+                    }
+                }
+                .padding(8)
+            }
+
             Text("WorkBuddy 配置")
                 .font(.headline)
-            Text("把下面内容粘贴到 \(WorkBuddyConfig.configPath)。如果文件里已有其他模型，请合并 models / availableModels，不要直接覆盖原有配置。WorkBuddy 会热重载 models.json。")
+            Text("把下面内容粘贴到 \(WorkBuddyConfig.configPath)。如果文件里已有其他模型，请合并 models / availableModels，不要直接覆盖原有配置。WorkBuddy 会热重载 models.json。切换模型后这里会自动生成新的配置。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             TextEditor(text: .constant(controller.workBuddyConfig))
                 .font(.system(.body, design: .monospaced))
-                .frame(minHeight: 300)
+                .frame(minHeight: 260)
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
                         .stroke(Color.secondary.opacity(0.25))

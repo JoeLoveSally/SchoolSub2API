@@ -22,6 +22,8 @@ final class ProxyController: ObservableObject {
     private var process: Process?
     private var outputPipe: Pipe?
     private var processLog = ""
+    private var cachedToken = ""
+    private var cachedUseAPI = ""
 
     private init() {}
 
@@ -39,11 +41,16 @@ final class ProxyController: ObservableObject {
             return false
         }
 
+        let wasRunning = status == .running && activeModel != nil
         stopProcess()
-        activeModel = nil
+        if !wasRunning {
+            activeModel = nil
+            workBuddyConfig = ""
+        }
         status = .starting
-        statusMessage = "Starting local proxy and validating HKUST \(model.displayName)..."
-        workBuddyConfig = ""
+        statusMessage = wasRunning
+            ? "Switching local proxy to HKUST \(model.displayName) and validating it..."
+            : "Starting local proxy and validating HKUST \(model.displayName)..."
         processLog = ""
 
         do {
@@ -65,6 +72,8 @@ final class ProxyController: ObservableObject {
                 throw launcherError("Proxy process exited during validation.")
             }
 
+            cachedToken = cleanToken
+            cachedUseAPI = cleanUseAPI
             localAPIKey = apiKey
             workBuddyConfig = try WorkBuddyConfig.render(apiKey: apiKey, port: Self.port, model: model)
             activeModel = model
@@ -75,6 +84,8 @@ final class ProxyController: ObservableObject {
             let detail = usefulFailureDetail(error)
             stopProcess()
             activeModel = nil
+            workBuddyConfig = ""
+            localAPIKey = ""
             status = .failed
             statusMessage = detail
             return false
@@ -82,9 +93,30 @@ final class ProxyController: ObservableObject {
     }
 
     @MainActor
+    func switchModel(to model: HKUSTModel) async -> Bool {
+        guard status == .running, let currentModel = activeModel else {
+            status = .failed
+            statusMessage = "The proxy must be running before switching models."
+            return false
+        }
+        if currentModel == model {
+            statusMessage = "HKUST \(model.displayName) is already active."
+            return true
+        }
+        guard !cachedToken.isEmpty, !cachedUseAPI.isEmpty else {
+            status = .failed
+            statusMessage = "HKUST credentials are no longer available in memory. Stop the proxy and enter them again."
+            return false
+        }
+        return await start(token: cachedToken, useAPI: cachedUseAPI, model: model)
+    }
+
+    @MainActor
     func stop() {
         stopProcess()
         activeModel = nil
+        cachedToken = ""
+        cachedUseAPI = ""
         status = .idle
         statusMessage = "Proxy stopped. Enter your HKUST credentials to start it again."
         workBuddyConfig = ""
@@ -155,6 +187,8 @@ final class ProxyController: ObservableObject {
                 self.outputPipe = nil
                 if self.status == .running || self.status == .starting {
                     self.activeModel = nil
+                    self.workBuddyConfig = ""
+                    self.localAPIKey = ""
                     self.status = .failed
                     self.statusMessage = self.usefulFailureDetail(
                         self.launcherError("Proxy process exited unexpectedly.")
