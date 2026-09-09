@@ -1,114 +1,37 @@
-# JoeJoeProxy macOS 本地代理 App
+# JoeJoeProxy macOS App
 
-`mac-app` 分支提供一个轻量 macOS SwiftUI 启动器，用来把已验证的 HKUST Web Chat 上游封装成本机 OpenAI 兼容代理。
+JoeJoeProxy is the macOS launcher for the HKUST Web Chat upstream. It bundles the Go proxy, listens on `127.0.0.1:5001`, validates the selected HKUST model with a live request, and generates a WorkBuddy `models.json` snippet.
 
-## 用户流程
+## Supported models
 
-1. 打开 `JoeJoeProxy.app`。
-2. 手动输入 HKUST `token` 和 `useApi`。
-3. 点击“启动本地代理”。
-4. App 会启动内置 `ds2api`，固定使用 `DeepSeek-V4-Flash-conv`，并只监听 `127.0.0.1:5001`。
-5. App 先检查 `/healthz`，随后发送一次真实的 `/v1/chat/completions` 请求验证 HKUST 凭据和 Flash 上游。
-6. 验证成功后弹窗提示，并展示可复制的 WorkBuddy `models.json` 配置。
+The app currently exposes the HKUST WebSocket models that have been verified in this project:
 
-HKUST `token` / `useApi` 只通过子进程环境变量传给本机 `ds2api`，不会写入 App 配置文件。用于本机 Harness 鉴权的随机 API key 会保存在 macOS Keychain 中，以便 WorkBuddy 配置在 App 重启后保持稳定。
+| App option | HKUST upstream ID | WorkBuddy input budget | Notes |
+| --- | --- | ---: | --- |
+| DeepSeek V4 Flash | `DeepSeek-V4-Flash-conv` | 262,144 | Recommended; verified deployment limit |
+| GLM-5.2 | `GLM-5.2` | 220,000 | Verified deployment limit; slower on long prompts |
+| DeepSeek V4 Pro | `DeepSeek-V4-Pro-conv` | 65,535 | Verified deployment limit |
+| Kimi K3 | `Kimi-K3` | 262,144 | Experimental web-chat route; conservative WorkBuddy budget |
 
-## App 名称与图标
+The selected model is passed to the bundled proxy as `HKUST_MODEL`. WorkBuddy `lite` and `reasoning` variants both point to the selected model.
 
-应用显示名和窗口标题均为：
+## User flow
 
-```text
-JoeJoeProxy
-```
+1. Open `JoeJoeProxy.app`.
+2. Enter your own HKUST `token` and `useApi` values.
+3. Choose a model; Flash is the default.
+4. Click **启动本地代理**.
+5. JoeJoeProxy starts the bundled proxy and validates the selected model with a live request.
+6. On success, copy the generated WorkBuddy configuration into `~/.codebuddy/models.json`.
 
-构建时会优先从 HKUST(GZ) AIGC Service System 的 `favicon.ico` 获取网站图标并生成 macOS `JoeJoeProxy.icns`；如果该站点在构建环境中无法直接返回 favicon，则使用 Google favicon cache 获取同一域名的 favicon 作为回退。可通过 `MACAPP_ICON_URL` 覆盖图标来源。
+HKUST credentials are passed only to the child proxy process and are not written to the generated WorkBuddy configuration.
 
-默认图标来源：
+## Build
 
-```text
-https://aigc.hkust-gz.edu.cn/favicon.ico
-```
-
-图标仅用于这个个人本地代理工具的应用标识，不表示 HKUST(GZ) 对该工具的官方背书；分发时仍应遵守学校品牌标识相关规定。
-
-## 固定模型
-
-当前 App 只使用：
-
-- Upstream model: `DeepSeek-V4-Flash-conv`
-- WorkBuddy model id: `deepseek-v4-flash`
-- `maxInputTokens`: `262144`
-- `maxOutputTokens`: `4096`
-- `lite`: `deepseek-v4-flash`
-- `reasoning`: `deepseek-v4-flash`
-
-也就是说主模型、lite 和 reasoning 全部走 Flash。
-
-## WorkBuddy
-
-App 启动成功后会生成完整配置，引导用户粘贴到：
-
-```text
-~/.codebuddy/models.json
-```
-
-WorkBuddy 当前自定义模型接口使用 OpenAI Chat Completions 完整 URL，因此生成的 endpoint 为：
-
-```text
-http://127.0.0.1:5001/v1/chat/completions
-```
-
-如果用户已经有 `~/.codebuddy/models.json`，应合并生成配置里的 `models` / `availableModels`，不要覆盖已有的其他模型。
-
-## 本地构建
-
-要求：
-
-- macOS 13+
-- Go 1.26+
-- Swift 5.9+ / Xcode Command Line Tools
-
-在仓库根目录执行：
+Builds require macOS because the bundle uses SwiftUI and macOS packaging tools:
 
 ```bash
 bash scripts/build-macos-app.sh
 ```
 
-当前机器是 Apple Silicon 时生成：
-
-```text
-dist/macos/arm64/JoeJoeProxy.app
-dist/macos/arm64/JoeJoeProxy-macos-arm64.zip
-```
-
-Intel Mac 对应 `x86_64` 目录。
-
-## GitHub Actions 构建
-
-`.github/workflows/macos-app.yml` 会分别在：
-
-- `macos-15`：arm64
-- `macos-15-intel`：x86_64
-
-构建两个可下载 Artifact：
-
-```text
-JoeJoeProxy-macos-arm64
-JoeJoeProxy-macos-x86_64
-```
-
-当前构建只做 ad-hoc codesign，没有 Apple Developer ID notarization。因此直接分发给其他 Mac 时仍可能遇到 Gatekeeper 的“未识别开发者”提示。正式外部分发时应增加 Developer ID 签名和 Apple notarization。
-
-## 运行时安全边界
-
-macOS App 设置：
-
-```text
-DS2API_BIND_HOST=127.0.0.1
-PORT=5001
-DS2API_AUTO_BUILD_WEBUI=0
-DS2API_ENV_WRITEBACK=0
-HKUST_MODEL=DeepSeek-V4-Flash-conv
-```
-
-因此 App 版默认不会把代理暴露到局域网，也不会把运行时 `DS2API_CONFIG_JSON` 回写到磁盘。
+GitHub Actions builds both Apple Silicon and Intel artifacts from the `mac-app` branch.

@@ -5,6 +5,7 @@ struct ContentView: View {
     @EnvironmentObject private var controller: ProxyController
     @State private var token = ""
     @State private var useAPI = ""
+    @State private var selectedModel: HKUSTModel = .deepSeekFlash
     @State private var showSuccess = false
 
     var body: some View {
@@ -19,11 +20,11 @@ struct ContentView: View {
             }
         }
         .padding(24)
-        .frame(width: 720, height: controller.status == .running ? 690 : 390)
+        .frame(width: 720, height: controller.status == .running ? 690 : 470)
         .alert("代理启动成功", isPresented: $showSuccess) {
             Button("好的", role: .cancel) {}
         } message: {
-            Text("已通过 HKUST DeepSeek V4 Flash 实际请求验证，本地代理正在 \(controller.proxyBaseURL) 运行。")
+            Text("已通过 HKUST \(controller.activeModel?.displayName ?? selectedModel.displayName) 实际请求验证，本地代理正在 \(controller.proxyBaseURL) 运行。")
         }
     }
 
@@ -33,7 +34,7 @@ struct ContentView: View {
                 .font(.title.bold())
             Text("HKUST Web Chat → 本地 OpenAI 兼容代理")
                 .foregroundStyle(.secondary)
-            Text("固定使用 DeepSeek V4 Flash · 262,144 输入上下文")
+            Text("默认 DeepSeek V4 Flash；可切换 HKUST 已验证模型")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -49,6 +50,21 @@ struct ContentView: View {
             SecureField("useApi", text: $useAPI)
                 .textFieldStyle(.roundedBorder)
 
+            Text("模型")
+                .font(.headline)
+            Picker("模型", selection: $selectedModel) {
+                ForEach(HKUSTModel.allCases) { model in
+                    Text(model.pickerLabel).tag(model)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .disabled(controller.status == .starting)
+
+            Text(selectedModel.detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             Text("凭据只传给本机代理进程，本应用不会把 token / useApi 写入配置文件。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -59,7 +75,11 @@ struct ContentView: View {
                 Spacer()
                 Button(controller.status == .starting ? "正在验证…" : "启动本地代理") {
                     Task {
-                        let succeeded = await controller.start(token: token, useAPI: useAPI)
+                        let succeeded = await controller.start(
+                            token: token,
+                            useAPI: useAPI,
+                            model: selectedModel
+                        )
                         if succeeded {
                             token = ""
                             useAPI = ""
@@ -78,7 +98,8 @@ struct ContentView: View {
     }
 
     private var runningView: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let model = controller.activeModel ?? selectedModel
+        return VStack(alignment: .leading, spacing: 14) {
             statusLine
 
             GroupBox("本地代理") {
@@ -92,7 +113,12 @@ struct ContentView: View {
                     GridRow {
                         Text("Model")
                             .foregroundStyle(.secondary)
-                        Text("DeepSeek-V4-Flash-conv")
+                        Text(model.upstreamID)
+                    }
+                    GridRow {
+                        Text("Context")
+                            .foregroundStyle(.secondary)
+                        Text("\(model.maxInputTokens.formatted()) tokens")
                     }
                     GridRow {
                         Text("Bind")

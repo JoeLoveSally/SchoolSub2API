@@ -12,12 +12,12 @@ final class ProxyController: ObservableObject {
     static let shared = ProxyController()
 
     static let port = 5001
-    static let upstreamModel = "DeepSeek-V4-Flash-conv"
 
     @Published private(set) var status: ProxyStatus = .idle
     @Published private(set) var statusMessage = "Enter your HKUST credentials to start the local proxy."
     @Published private(set) var workBuddyConfig = ""
     @Published private(set) var localAPIKey = ""
+    @Published private(set) var activeModel: HKUSTModel?
 
     private var process: Process?
     private var outputPipe: Pipe?
@@ -30,7 +30,7 @@ final class ProxyController: ObservableObject {
     }
 
     @MainActor
-    func start(token: String, useAPI: String) async -> Bool {
+    func start(token: String, useAPI: String, model: HKUSTModel) async -> Bool {
         let cleanToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanUseAPI = useAPI.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanToken.isEmpty, !cleanUseAPI.isEmpty else {
@@ -40,33 +40,41 @@ final class ProxyController: ObservableObject {
         }
 
         stopProcess()
+        activeModel = nil
         status = .starting
-        statusMessage = "Starting local proxy and validating HKUST DeepSeek V4 Flash..."
+        statusMessage = "Starting local proxy and validating HKUST \(model.displayName)..."
         workBuddyConfig = ""
         processLog = ""
 
         do {
             let apiKey = try LocalAPIKeyStore.loadOrCreate()
-            let child = try makeProcess(token: cleanToken, useAPI: cleanUseAPI, apiKey: apiKey)
+            let child = try makeProcess(
+                token: cleanToken,
+                useAPI: cleanUseAPI,
+                apiKey: apiKey,
+                model: model
+            )
             process = child
             try child.run()
             installTerminationHandler(for: child)
 
             try await waitUntilHealthy(process: child)
-            try await verifyHKUST(apiKey: apiKey)
+            try await verifyHKUST(apiKey: apiKey, model: model)
 
             guard child.isRunning, process === child else {
                 throw launcherError("Proxy process exited during validation.")
             }
 
             localAPIKey = apiKey
-            workBuddyConfig = try WorkBuddyConfig.render(apiKey: apiKey, port: Self.port)
+            workBuddyConfig = try WorkBuddyConfig.render(apiKey: apiKey, port: Self.port, model: model)
+            activeModel = model
             status = .running
-            statusMessage = "Proxy started successfully. HKUST DeepSeek V4 Flash passed the live validation request."
+            statusMessage = "Proxy started successfully. HKUST \(model.displayName) passed the live validation request."
             return true
         } catch {
             let detail = usefulFailureDetail(error)
             stopProcess()
+            activeModel = nil
             status = .failed
             statusMessage = detail
             return false
@@ -76,6 +84,7 @@ final class ProxyController: ObservableObject {
     @MainActor
     func stop() {
         stopProcess()
+        activeModel = nil
         status = .idle
         statusMessage = "Proxy stopped. Enter your HKUST credentials to start it again."
         workBuddyConfig = ""
@@ -83,7 +92,12 @@ final class ProxyController: ObservableObject {
     }
 
     @MainActor
-    private func makeProcess(token: String, useAPI: String, apiKey: String) throws -> Process {
+    private func makeProcess(
+        token: String,
+        useAPI: String,
+        apiKey: String,
+        model: HKUSTModel
+    ) throws -> Process {
         guard let binaryURL = Bundle.main.resourceURL?.appendingPathComponent("ds2api"),
               FileManager.default.isExecutableFile(atPath: binaryURL.path) else {
             throw launcherError("Bundled ds2api executable is missing. Rebuild the macOS app bundle.")
@@ -98,7 +112,7 @@ final class ProxyController: ObservableObject {
         var environment = ProcessInfo.processInfo.environment
         environment["HKUST_TOKEN"] = token
         environment["HKUST_USE_API"] = useAPI
-        environment["HKUST_MODEL"] = Self.upstreamModel
+        environment["HKUST_MODEL"] = model.upstreamID
         environment["PORT"] = String(Self.port)
         environment["DS2API_BIND_HOST"] = "127.0.0.1"
         environment["DS2API_CONFIG_JSON"] = configJSON
@@ -140,6 +154,7 @@ final class ProxyController: ObservableObject {
                 self.outputPipe?.fileHandleForReading.readabilityHandler = nil
                 self.outputPipe = nil
                 if self.status == .running || self.status == .starting {
+                    self.activeModel = nil
                     self.status = .failed
                     self.statusMessage = self.usefulFailureDetail(
                         self.launcherError("Proxy process exited unexpectedly.")
@@ -178,12 +193,12 @@ final class ProxyController: ObservableObject {
         }
     }
 
-    private func verifyHKUST(apiKey: String) async throws {
+    private func verifyHKUST(apiKey: String, model: HKUSTModel) async throws {
         guard let url = URL(string: "\(proxyBaseURL)/v1/chat/completions") else {
             throw launcherError("Invalid local proxy URL.")
         }
         let payload: [String: Any] = [
-            "model": WorkBuddyConfig.modelID,
+            "model": model.workBuddyID,
             "messages": [[
                 "role": "user",
                 "content": "Reply exactly OK."
