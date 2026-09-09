@@ -1,0 +1,52 @@
+name: macOS App
+
+on:
+  push:
+    branches:
+      - mac-app
+    paths:
+      - "cmd/ds2api/**"
+      - "internal/**"
+      - "macapp/**"
+      - "scripts/build-macos-app.sh"
+      - ".github/workflows/macos-app.yml"
+      - "go.mod"
+      - "go.sum"
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Go tests
+        run: go test ./cmd/ds2api ./internal/hkust ./internal/server
+
+      - name: Swift tests
+        run: swift test --package-path macapp
+
+      - name: Build app bundle
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: bash scripts/build-macos-app.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SchoolSub2API-macos-${{ matrix.arch }}
+          path: dist/macos/${{ matrix.arch }}/SchoolSub2API-macos-${{ matrix.arch }}.zip
+          if-no-files-found: error
