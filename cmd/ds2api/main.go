@@ -18,6 +18,10 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "hkust-probe" {
+		os.Exit(runHKUSTProbeCLI(os.Args[2:]))
+	}
+
 	if err := config.LoadDotEnv(); err != nil {
 		config.Logger.Warn("[dotenv] load failed", "error", err)
 	}
