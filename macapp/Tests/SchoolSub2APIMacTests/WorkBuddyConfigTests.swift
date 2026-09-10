@@ -22,6 +22,7 @@ final class WorkBuddyConfigTests: XCTestCase {
 
             let renderedModel = models[0]
             XCTAssertEqual(renderedModel["id"] as? String, model.workBuddyID)
+            XCTAssertEqual(renderedModel["vendor"] as? String, "OpenAI")
             XCTAssertEqual(renderedModel["apiKey"] as? String, "sk-local-test")
             XCTAssertEqual(renderedModel["maxInputTokens"] as? Int, model.maxInputTokens)
             XCTAssertEqual(renderedModel["url"] as? String, "http://127.0.0.1:5001/v1/chat/completions")
@@ -33,6 +34,18 @@ final class WorkBuddyConfigTests: XCTestCase {
             let available = try XCTUnwrap(root["availableModels"] as? [String])
             XCTAssertEqual(available, [model.workBuddyID])
         }
+    }
+
+    func testWorkBuddyIDsAreUniqueAndUseUppercaseHKUSTPrefix() {
+        let ids = HKUSTModel.allCases.map(\.workBuddyID)
+        XCTAssertEqual(Set(ids).count, HKUSTModel.allCases.count)
+        for id in ids {
+            XCTAssertTrue(id.hasPrefix("HKUST-"), "unexpected WorkBuddy ID: \(id)")
+        }
+        XCTAssertEqual(HKUSTModel.glm52.workBuddyID, "HKUST-GLM-5.2")
+        XCTAssertEqual(HKUSTModel.deepSeekFlash.workBuddyID, "HKUST-DeepSeek-V4-Flash")
+        XCTAssertEqual(HKUSTModel.deepSeekPro.workBuddyID, "HKUST-DeepSeek-V4-Pro")
+        XCTAssertEqual(HKUSTModel.kimiK3.workBuddyID, "HKUST-Kimi-K3")
     }
 
     func testVerifiedContextBudgets() {
@@ -47,15 +60,18 @@ final class WorkBuddyConfigTests: XCTestCase {
         XCTAssertEqual(HKUSTModel.glm52.upstreamID, "GLM-5.2")
         XCTAssertEqual(HKUSTModel.deepSeekPro.upstreamID, "DeepSeek-V4-Pro-conv")
         XCTAssertEqual(HKUSTModel.kimiK3.upstreamID, "Kimi-K3")
+        XCTAssertEqual(HKUSTModel.from(upstreamID: "kimi-k3"), .kimiK3)
     }
 
-    func testLocalProxyConfigAcceptsGLMAndKimiModelIDs() throws {
+    func testLocalProxyConfigAcceptsAllHKUSTWorkBuddyIDs() throws {
         let rendered = try LocalProxyConfig.render(apiKey: "sk-local-test")
         let data = try XCTUnwrap(rendered.data(using: .utf8))
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let aliases = try XCTUnwrap(root["model_aliases"] as? [String: String])
 
         XCTAssertEqual(aliases[HKUSTModel.glm52.workBuddyID], "deepseek-v4-flash")
+        XCTAssertEqual(aliases[HKUSTModel.deepSeekFlash.workBuddyID], "deepseek-v4-flash")
+        XCTAssertEqual(aliases[HKUSTModel.deepSeekPro.workBuddyID], "deepseek-v4-pro")
         XCTAssertEqual(aliases[HKUSTModel.kimiK3.workBuddyID], "deepseek-v4-flash")
         XCTAssertEqual(root["keys"] as? [String], ["sk-local-test"])
         XCTAssertNil(root["token"])
