@@ -75,35 +75,71 @@ func (c *Client) ProbeModel(ctx context.Context, model string, timeout time.Dura
 
 	probeClient := *c
 	probeClient.cfg.Model = model
-	resp, err := probeClient.CallCompletion(
-		probeCtx,
-		nil,
-		map[string]any{"prompt": "Reply with exactly JOEJOEPROXY_OK and nothing else."},
-		"",
-		1,
-	)
-	if err != nil {
-		if errors.Is(probeCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
-			return finish("timeout", "HKUST probe timed out")
+	type completionResult struct {
+		body io.ReadCloser
+		err  error
+	}
+	completionCh := make(chan completionResult, 1)
+	go func() {
+		resp, err := probeClient.CallCompletion(
+			probeCtx,
+			nil,
+			map[string]any{"prompt": "Reply with exactly JOEJOEPROXY_OK and nothing else."},
+			"",
+			1,
+		)
+		if err != nil {
+			completionCh <- completionResult{err: err}
+			return
 		}
-		return finish("failed", err.Error())
-	}
-	if resp == nil || resp.Body == nil {
-		return finish("failed", "HKUST probe returned an empty response")
-	}
-	defer func() { _ = resp.Body.Close() }()
+		if resp == nil || resp.Body == nil {
+			completionCh <- completionResult{err: errors.New("HKUST probe returned an empty response")}
+			return
+		}
+		completionCh <- completionResult{body: resp.Body}
+	}()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxProbeBodyBytes))
-	if err != nil {
-		if errors.Is(probeCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
-			return finish("timeout", "HKUST probe timed out")
+	var body io.ReadCloser
+	select {
+	case <-probeCtx.Done():
+		return finish("timeout", "HKUST probe timed out")
+	case completion := <-completionCh:
+		if completion.err != nil {
+			if errors.Is(probeCtx.Err(), context.DeadlineExceeded) || errors.Is(completion.err, context.DeadlineExceeded) {
+				return finish("timeout", "HKUST probe timed out")
+			}
+			return finish("failed", completion.err.Error())
 		}
-		return finish("failed", err.Error())
+		body = completion.body
 	}
-	if !strings.Contains(strings.ToUpper(string(body)), probeMarker) {
-		return finish("failed", "HKUST returned a response, but it did not pass the probe marker check")
+	defer func() { _ = body.Close() }()
+
+	type readResult struct {
+		data []byte
+		err  error
 	}
-	return finish("available", "")
+	readCh := make(chan readResult, 1)
+	go func() {
+		data, err := io.ReadAll(io.LimitReader(body, maxProbeBodyBytes))
+		readCh <- readResult{data: data, err: err}
+	}()
+
+	select {
+	case <-probeCtx.Done():
+		_ = body.Close()
+		return finish("timeout", "HKUST probe timed out")
+	case read := <-readCh:
+		if read.err != nil {
+			if errors.Is(probeCtx.Err(), context.DeadlineExceeded) || errors.Is(read.err, context.DeadlineExceeded) {
+				return finish("timeout", "HKUST probe timed out")
+			}
+			return finish("failed", read.err.Error())
+		}
+		if !strings.Contains(strings.ToUpper(string(read.data)), probeMarker) {
+			return finish("failed", "HKUST returned a response, but it did not pass the probe marker check")
+		}
+		return finish("available", "")
+	}
 }
 
 func isSupportedProbeModel(model string) bool {
