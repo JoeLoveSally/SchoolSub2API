@@ -1,6 +1,6 @@
 import Foundation
 
-enum HKUSTModel: String, CaseIterable, Identifiable {
+enum HKUSTModel: String, CaseIterable, Identifiable, Hashable {
     case glm52
     case deepSeekFlash
     case deepSeekPro
@@ -39,25 +39,18 @@ enum HKUSTModel: String, CaseIterable, Identifiable {
     var workBuddyID: String {
         switch self {
         case .deepSeekFlash:
-            return "deepseek-v4-flash"
+            return "HKUST-DeepSeek-V4-Flash"
         case .glm52:
-            return "glm-5.2"
+            return "HKUST-GLM-5.2"
         case .deepSeekPro:
-            return "deepseek-v4-pro"
+            return "HKUST-DeepSeek-V4-Pro"
         case .kimiK3:
-            return "kimi-k3"
+            return "HKUST-Kimi-K3"
         }
     }
 
     var vendor: String {
-        switch self {
-        case .deepSeekFlash, .deepSeekPro:
-            return "DeepSeek"
-        case .glm52:
-            return "Zhipu AI"
-        case .kimiK3:
-            return "Moonshot AI"
-        }
+        "OpenAI"
     }
 
     var maxInputTokens: Int {
@@ -78,9 +71,9 @@ enum HKUSTModel: String, CaseIterable, Identifiable {
     var pickerLabel: String {
         switch self {
         case .deepSeekFlash:
-            return "DeepSeek V4 Flash · 262K · 暂不可用"
+            return "DeepSeek V4 Flash · 262K"
         case .glm52:
-            return "GLM-5.2 · 220K · 推荐"
+            return "GLM-5.2 · 220K · 默认"
         case .deepSeekPro:
             return "DeepSeek V4 Pro · 65K"
         case .kimiK3:
@@ -91,22 +84,28 @@ enum HKUSTModel: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .deepSeekFlash:
-            return "学校侧当前异常；暂不作为默认，恢复后仍可手动验证。"
+            return "已实测 context 上限 262,144；当前连通性以实时检测结果为准。"
         case .glm52:
-            return "当前默认；已实测 220,000 context，长上下文请求通常比 Flash 慢。"
+            return "默认模型；已实测 context 上限 220,000，当前连通性以实时检测结果为准。"
         case .deepSeekPro:
-            return "已实测 65,535 context；长 Coding Agent 会话不推荐。"
+            return "已实测 context 上限 65,535；长 Coding Agent 会话不推荐。"
         case .kimiK3:
-            return "HKUST WebSocket 已实测可用，但网页 UI 未公开；按 262K 保守配置。"
+            return "HKUST WebSocket 路径已实测；网页 UI 未公开，按 262K 保守配置。"
         }
+    }
+
+    static func from(upstreamID: String) -> HKUSTModel? {
+        allCases.first { $0.upstreamID.caseInsensitiveCompare(upstreamID) == .orderedSame }
     }
 }
 
 enum LocalProxyConfig {
-    // These aliases only select DS2API's existing compatibility schema. The actual
-    // HKUST upstream model is controlled independently by HKUST_MODEL.
+    // These aliases select DS2API's existing compatibility schema. The real HKUST
+    // upstream model is controlled independently by HKUST_MODEL.
     static let compatibilityAliases: [String: String] = [
         HKUSTModel.glm52.workBuddyID: "deepseek-v4-flash",
+        HKUSTModel.deepSeekFlash.workBuddyID: "deepseek-v4-flash",
+        HKUSTModel.deepSeekPro.workBuddyID: "deepseek-v4-pro",
         HKUSTModel.kimiK3.workBuddyID: "deepseek-v4-flash"
     ]
 
