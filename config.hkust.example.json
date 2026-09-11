@@ -5,7 +5,9 @@
   ],
   "model_aliases": {
     "gpt-5.3-codex": "deepseek-v4-pro",
-    "codex-mini-latest": "deepseek-v4-pro"
+    "codex-mini-latest": "deepseek-v4-pro",
+    "hkust-glm-5.2": "deepseek-v4-pro",
+    "glm-5.2": "deepseek-v4-pro"
   },
   "responses": {
     "store_ttl_seconds": 900
