@@ -216,19 +216,21 @@ func UpstreamEmptyOutputDetail(contentFilter bool, text, thinking string) (int, 
 		return http.StatusBadRequest, "Upstream content filtered the response and returned no output.", "content_filter"
 	}
 	if strings.TrimSpace(thinking) != "" {
-		return http.StatusTooManyRequests, "Upstream account hit a rate limit and returned reasoning without visible output.", "upstream_empty_output"
+		return http.StatusBadGateway, "Upstream returned reasoning without visible output or a valid tool call.", "upstream_empty_output"
 	}
 	return http.StatusServiceUnavailable, "Upstream service is unavailable and returned no output.", "upstream_unavailable"
 }
 
-// ShouldRetryEmptyOutput returns true when the turn produced no visible text
-// and has no tool calls or content filter. This includes thinking-only responses,
-// where the model returned reasoning but no answer — a retry may yield text.
+// ShouldRetryEmptyOutput returns true only for a genuinely empty response.
+// A reasoning-only response is a completed but unusable model response; retrying
+// it can duplicate a long reasoning pass and must not be presented as a quota
+// or rate-limit event.
 func ShouldRetryEmptyOutput(turn Turn, attempts, maxAttempts int) bool {
 	return attempts < maxAttempts &&
 		!turn.ContentFilter &&
 		len(turn.ToolCalls) == 0 &&
-		strings.TrimSpace(turn.Text) == ""
+		strings.TrimSpace(turn.Text) == "" &&
+		strings.TrimSpace(turn.Thinking) == ""
 }
 
 func FinalizeTurn(turn Turn, opts FinalizeOptions) FinalOutcome {
