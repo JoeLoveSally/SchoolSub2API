@@ -15,7 +15,7 @@ func UpstreamEmptyOutputDetail(contentFilter bool, text, thinking string) (int, 
 		return http.StatusBadRequest, "Upstream content filtered the response and returned no output.", "content_filter"
 	}
 	if thinking != "" {
-		return http.StatusTooManyRequests, "Upstream account hit a rate limit and returned reasoning without visible output.", "upstream_empty_output"
+		return http.StatusBadGateway, "Upstream returned reasoning without visible output or a valid tool call.", "upstream_empty_output"
 	}
 	return http.StatusServiceUnavailable, "Upstream service is unavailable and returned no output.", "upstream_unavailable"
 }
