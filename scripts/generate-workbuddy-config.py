@@ -16,10 +16,10 @@ DEFAULT_MAX_OUTPUT = 131_072
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate a WorkBuddy custom-model JSON entry for local SchoolSub2API.",
+        description="Generate a WorkBuddy models.json config for local SchoolSub2API.",
     )
     parser.add_argument("--config", default="config.json", help="DS2API config file (default: config.json)")
-    parser.add_argument("--output", help="Optional WorkBuddy models.json path. If omitted, print JSON only.")
+    parser.add_argument("--output", help="Optional WorkBuddy models.json path. If omitted, print complete JSON only.")
     parser.add_argument("--api-key", help="DS2API client API key; defaults to the first key in config.json")
     parser.add_argument("--url", default=DEFAULT_URL, help=f"OpenAI-compatible endpoint (default: {DEFAULT_URL})")
     parser.add_argument("--model-id", default=DEFAULT_MODEL_ID)
@@ -112,7 +112,7 @@ def main() -> int:
     }
 
     if not args.output:
-        print(json.dumps(model, ensure_ascii=False, indent=2))
+        print(json.dumps({"models": [model]}, ensure_ascii=False, indent=2))
         return 0
 
     output_path = Path(args.output).expanduser()
