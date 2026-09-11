@@ -65,25 +65,28 @@ def wsl_windows_home() -> Path | None:
     if "microsoft" not in platform.release().lower():
         return None
     try:
+        # cmd.exe follows the Windows console code page by default, which can
+        # make Python's UTF-8 text decoding fail on non-English Windows.
+        # `/u` forces UTF-16LE output, so decode the bytes explicitly.
         proc = subprocess.run(
-            ["cmd.exe", "/d", "/c", "echo", "%USERPROFILE%"],
+            ["cmd.exe", "/u", "/d", "/c", "echo", "%USERPROFILE%"],
             check=True,
             capture_output=True,
-            text=True,
             timeout=5,
         )
-        win_home = proc.stdout.strip().replace("\r", "")
+        win_home = proc.stdout.decode("utf-16le", errors="strict").strip()
         if not win_home or "%USERPROFILE%" in win_home:
             return None
+
         proc = subprocess.run(
             ["wslpath", "-u", win_home],
             check=True,
             capture_output=True,
-            text=True,
             timeout=5,
         )
-        return Path(proc.stdout.strip())
-    except (OSError, subprocess.SubprocessError):
+        linux_home = proc.stdout.decode("utf-8", errors="strict").strip()
+        return Path(linux_home) if linux_home else None
+    except (OSError, UnicodeError, subprocess.SubprocessError):
         return None
 
 
