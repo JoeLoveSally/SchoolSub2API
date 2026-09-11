@@ -59,6 +59,7 @@ func (c *Client) CallCompletion(ctx context.Context, _ *auth.RequestAuth, payloa
 		return nil, errors.New("HKUST completion prompt is empty")
 	}
 	prompt = adaptPromptForWebChat(prompt)
+	config.Logger.Info("[hkust] adapted prompt", "prompt", prompt)
 
 	endpoint, err := c.completionURL(uuid.NewString())
 	if err != nil {
