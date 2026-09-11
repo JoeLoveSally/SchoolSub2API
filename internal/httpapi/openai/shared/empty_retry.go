@@ -1,10 +1,22 @@
 package shared
 
-import "strings"
+import (
+	"os"
+	"strings"
+)
 
 const EmptyOutputRetrySuffix = "Previous reply had no visible output. Please regenerate the visible final answer or tool call now."
 
 func EmptyOutputRetryEnabled() bool {
+	// The HKUST web-chat transport creates a fresh upstream conversation for
+	// each completion and already returns a complete model turn. Synthetic
+	// follow-up retries are both misleading for diagnostics and expensive when
+	// the model has already spent a long time producing reasoning-only output.
+	if strings.TrimSpace(os.Getenv("HKUST_TOKEN")) != "" ||
+		strings.TrimSpace(os.Getenv("HKUST_USE_API")) != "" ||
+		strings.TrimSpace(os.Getenv("HKUST_WS_URL")) != "" {
+		return false
+	}
 	return true
 }
 
